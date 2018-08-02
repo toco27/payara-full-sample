@@ -6,9 +6,9 @@ def CONT_DB_NAME = "postgres"
 buildscript {
 	ext.versions = [
 		serviceVersion	: '0.0.1',
-		jackson			: '2.9.0',
-		jee				: '7.0',
-		postgresql		: '9.4.1212'
+		jackson		: '2.9.0',
+		jee		: '7.0',
+		postgresql	: '9.4.1212'
 	]
 
 	repositories {
