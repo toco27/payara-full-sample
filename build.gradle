@@ -65,9 +65,6 @@ spotless {
 }
 
 war {
-	classpath fileTree("${libsDir}") {
-		include "${project.name}-${project.version}-swagger-ui.jar"
-	}
 	archiveName "api.war"
 }
 
@@ -101,7 +98,7 @@ task stopDocker(type: DockerStopContainer) {
 	// ignore exception if container does not exist otherwise throw it
 	onError { exception ->
 		if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
-		throw exception
+			throw exception
 		}
 	}
 }
@@ -112,7 +109,7 @@ task removeDocker(type: DockerRemoveContainer) {
 	// ignore exception if container does not exist otherwise throw it
 	onError { exception ->
 		if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
-		throw exception
+			throw exception
 		}
 	}
 }
@@ -151,7 +148,7 @@ task stopDockerDatabase(type: DockerStopContainer) {
 	// ignore exception if container does not exist otherwise throw it
 	onError { exception ->
 		if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
-		throw exception
+			throw exception
 		}
 	}
 }
@@ -162,13 +159,13 @@ task removeDockerDatabase(type: DockerRemoveContainer) {
 	// ignore exception if container does not exist otherwise throw it
 	onError { exception ->
 		if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
-		throw exception
+			throw exception
 		}
 	}
 }
 
 task pullDockerDatabase(type: DockerPullImage) {
-	repository = "$bmwDockerRegistryUrl/odm-customer-mgmt/docker-images/postgres:9.6"
+	repository = "postgres:9.6"
 }
 
 task createDockerDatabase(type: DockerCreateContainer) {
@@ -191,4 +188,10 @@ task createDockerDatabase(type: DockerCreateContainer) {
 task startDockerDatabase(type: DockerStartContainer) {
 	dependsOn createDockerDatabase
 	targetContainerId { CONT_DB_NAME }
+}
+
+task setUp {
+	dependsOn startDockerDatabase
+	dependsOn startDocker
+	tasks.findByName('startDocker').mustRunAfter 'startDockerDatabase'
 }
