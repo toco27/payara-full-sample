@@ -1,0 +1,192 @@
+def MS_NAME = project.name.toLowerCase()
+def IMAGE_NAME = project.name.toLowerCase()
+def CONT_DB_NAME = "postgres"
+
+
+buildscript {
+	ext.versions = [
+		serviceVersion          : '0.0.1',
+		jackson					: '2.9.0',
+		jee						: '7.0',
+		postgresql				: '9.4.1212'
+	]
+
+	repositories {
+	    mavenCentral()
+	}
+	
+	dependencies {
+        classpath 'com.bmuschko:gradle-docker-plugin:3.2.4'
+    }
+}
+
+repositories {
+	mavenCentral()
+}
+
+apply plugin: 'war'
+apply plugin: 'eclipse'
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+compileJava.options.encoding = "UTF-8"
+compileTestJava.options.encoding = "UTF-8"
+
+configurations.all {
+    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+}
+
+dependencies {
+
+	implementation "com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider:$versions.jackson"
+    implementation "com.fasterxml.jackson.core:jackson-databind:$versions.jackson"
+    implementation "javax:javaee-api:$versions.jee"
+    implementation "org.postgresql:postgresql:$versions.postgresql"
+    
+
+}
+
+group = 'com.mvi.samples'
+version "${versions.serviceVersion}"
+
+import com.bmuschko.gradle.docker.tasks.image.*
+import com.bmuschko.gradle.docker.tasks.DockerInfo
+import com.bmuschko.gradle.docker.tasks.container.*
+
+
+war {
+  classpath fileTree("${libsDir}") {
+    include "${project.name}-${project.version}-swagger-ui.jar"
+  }
+  archiveName "api.war"
+}
+
+task copyWar(type: Copy) {
+  dependsOn war
+  from war.archivePath
+  into 'build/docker'
+}
+
+task copySources(type: Copy) {
+  from 'src/main/docker'
+  into 'build/docker'
+}
+
+task createDockerfile(type: Dockerfile) {
+  dependsOn copyWar
+  dependsOn copySources
+  destFile = project.file('build/docker/Dockerfile')
+  from "payara/server-full"
+  copyFile(war.archiveName, '$AUTODEPLOY_DIR')
+}
+
+task buildDocker(type: DockerBuildImage) {
+  dependsOn createDockerfile
+  inputDir = createDockerfile.destFile.parentFile
+  tag = "${IMAGE_NAME}:latest"
+}
+
+task stopDocker(type: DockerStopContainer) {
+  targetContainerId { MS_NAME }
+  // ignore exception if container does not exist otherwise throw it
+  onError { exception ->
+    if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
+      throw exception
+    }
+  }
+}
+
+task removeDocker(type: DockerRemoveContainer) {
+  dependsOn stopDocker
+  targetContainerId { MS_NAME }
+  // ignore exception if container does not exist otherwise throw it
+  onError { exception ->
+    if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
+      throw exception
+    }
+  }
+}
+
+task createDocker(type: DockerCreateContainer) {
+  dependsOn buildDocker
+  dependsOn removeDocker
+  targetImageId { buildDocker.getImageId() }
+
+  env = [
+  	'DB_HOST=' + dbHostProp,
+    'DB_PORT=' + dbPortProp,
+    'DB_USER=' + dbUserProp,
+    'DB_PASSWORD=' + dbPasswordProp,
+    'DB_DATABASE=' + dbDatabaseProp
+  ]
+
+  portBindings = [
+  	'8080:8080',
+  	'4848:4848'
+  ]
+
+  containerName = MS_NAME
+  links = [CONT_DB_NAME + ":5432"]
+
+}
+
+task startDocker(type: DockerStartContainer) {
+  dependsOn createDocker
+  targetContainerId { MS_NAME }
+}
+
+// Docker tasks for creating and running a PostgreSQL DB, start...
+
+task stopDockerDatabase(type: DockerStopContainer) {
+  targetContainerId { CONT_DB_NAME }
+  // ignore exception if container does not exist otherwise throw it
+  onError { exception ->
+    if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
+      throw exception
+    }
+  }
+}
+
+task removeDockerDatabase(type: DockerRemoveContainer) {
+  dependsOn stopDockerDatabase
+  targetContainerId { CONT_DB_NAME }
+  // ignore exception if container does not exist otherwise throw it
+  onError { exception ->
+    if (exception != null && exception.message != null && !exception.message.contains('No such container')) {
+      throw exception
+    }
+  }
+}
+
+task pullDockerDatabase(type: DockerPullImage) {
+  repository = "$bmwDockerRegistryUrl/odm-customer-mgmt/docker-images/postgres:9.6"
+}
+
+task createDockerDatabase(type: DockerCreateContainer) {
+  dependsOn pullDockerDatabase
+  dependsOn removeDockerDatabase
+  targetImageId { pullDockerDatabase.getImageId() }
+
+  env = [
+    'DB_HOST=' + dbHostProp,
+    'DB_PORT=' + dbPortProp,
+    'POSTGRES_USER=' + dbUserProp,
+    'POSTGRES_PASSWORD=' + dbPasswordProp,
+    'POSTGRES_DB=' + dbDatabaseProp
+  ]
+
+  containerName = CONT_DB_NAME
+  portBindings = [dbPortProp + ':5432']
+}
+
+task startDockerDatabase(type: DockerStartContainer) {
+  dependsOn createDockerDatabase
+  targetContainerId { CONT_DB_NAME }
+}
+
+
+
+
+
